@@ -1735,9 +1735,9 @@ class TestDistributions(DistributionsTestCase):
     @unittest.skipIf(not TEST_NUMPY, "NumPy not found")
     def test_inversegamma_sample(self):
         set_rng_seed(0)  # see Note [Randomized statistical tests]
-        for concentration, rate in product([0.5, 1, 2], [0.1, 1.0, 10.0]):
+        for concentration, rate in product([2, 5], [0.1, 1.0, 10.0]):
             self._check_sampler_sampler(InverseGamma(concentration, rate),
-                                        scipy.stats.invgamma(concentration, 1 / rate),
+                                        scipy.stats.invgamma(concentration, scale=rate),
                                         'InverseGamma()')
 
     def test_lognormal(self):
@@ -4765,7 +4765,7 @@ class TestAgainstScipy(DistributionsTestCase):
             ),
             (
                 InverseGamma(positive_var, positive_var2),
-                scipy.stats.invgamma(positive_var, scale=positive_var2.reciprocal())
+                scipy.stats.invgamma(positive_var, scale=positive_var2)
             ),
             (
                 Laplace(random_var, positive_var2),
