@@ -12,7 +12,7 @@ namespace ops {
 
 using namespace api::utils;
 
-Tensor& uniform_(
+static Tensor& uniform_(
     Tensor& self,
     const double from,
     const double to,
@@ -57,7 +57,7 @@ Tensor& uniform_(
   return self;
 }
 
-Tensor rand_like(
+static Tensor rand_like(
     const at::Tensor& input_arg,
     const c10::optional<c10::ScalarType> /* not implemented */,
     const c10::optional<c10::Layout> /* not implemented */,
