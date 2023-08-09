@@ -2990,7 +2990,9 @@ module_db: List[ModuleInfo] = [
                skips=(
                    DecorateInfo(unittest.skip("Skipped!"), 'TestModule', 'test_grad'),
                    DecorateInfo(unittest.skip("Skipped!"), 'TestModule', 'test_gradgrad'),
-                   DecorateInfo(skipIfMps, 'TestModule', dtypes=[torch.float64]),)
+                   DecorateInfo(skipIfMps, 'TestModule', dtypes=[torch.float64]),
+                   # Fails with channels last test on MPS backend
+                   DecorateInfo(unittest.expectedFailure, "TestModule", "test_memory_format", device_type='mps'),)
                ),
     ModuleInfo(torch.nn.MaxPool1d,
                module_inputs_func=module_inputs_torch_nn_MaxPool1d,
@@ -3265,7 +3267,9 @@ module_db: List[ModuleInfo] = [
     ModuleInfo(torch.nn.Tanhshrink,
                module_inputs_func=module_inputs_torch_nn_Tanhshrink,
                skips=(
-                   DecorateInfo(skipIfMps, 'TestModule', dtypes=[torch.float64]),)
+                   DecorateInfo(skipIfMps, 'TestModule', dtypes=[torch.float64]),
+                   # Fails with channels last test on MPS backend
+                   DecorateInfo(unittest.expectedFailure, "TestModule", "test_memory_format", device_type='mps'),)
                ),
     ModuleInfo(torch.nn.Threshold,
                module_inputs_func=module_inputs_torch_nn_Threshold,
