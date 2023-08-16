@@ -209,15 +209,10 @@ class C10_API SymInt {
       return c10::make_optional(data_);
     }
     auto* node = toSymNodeImplUnowned();
-    int64_t c = node->large_negative_int();
-    if (c != 0) {
-      return c10::make_optional(c);
+    if (auto c = node->constant_int()) {
+      return c;
     }
-    c10::optional<int64_t> d = node->maybe_as_int();
-    if (d.has_value()) {
-      return d;
-    }
-    return c10::nullopt;
+    return node->maybe_as_int();
   }
 
   // Return whether the integer is directly coercible to a SymInt
