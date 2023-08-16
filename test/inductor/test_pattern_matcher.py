@@ -63,6 +63,7 @@ class TestPaternMatcher(TestCase):
         self.assertEqual("mixed_mm" in code, mixed_mm_expected)
         self.assertEqual("fallback_mixed_mm" in code, fallback_mixed_mm_expected)
 
+    @unittest.skipIf(any(int(arch[3:]) < 80 for arch in torch.cuda.get_arch_list()), "need sm_80")
     @inductor_config.patch(force_mixed_mm=True)
     def test_mixed_mm(self):
         def fn(a, b):
@@ -90,6 +91,7 @@ class TestPaternMatcher(TestCase):
         for args in args_list:
             self._test_mixed_impl(fn, args, True, False)
 
+    @unittest.skipIf(any(int(arch[3:]) < 80 for arch in torch.cuda.get_arch_list()), "need sm_80")
     @inductor_config.patch(force_mixed_mm=True, max_autotune_gemm=True)
     def test_mixed_mm_epi_works(self):
         def fn(a, b, c, d):
@@ -119,6 +121,7 @@ class TestPaternMatcher(TestCase):
         for args in args_list:
             self._test_mixed_impl(fn, args, True, False)
 
+    @unittest.skipIf(any(int(arch[3:]) < 80 for arch in torch.cuda.get_arch_list()), "need sm_80")
     def test_mixed_mm_gating(self):
         def fn(a, b):
             return torch.mm(a, b.to(a.dtype))
@@ -154,6 +157,7 @@ class TestPaternMatcher(TestCase):
         )
         self._test_mixed_impl(fn, args, False, False)
 
+    @unittest.skipIf(any(int(arch[3:]) < 80 for arch in torch.cuda.get_arch_list()), "need sm_80")
     @inductor_config.patch(use_mixed_mm=True)
     def test_uint4x2_mixed_mm(self):
         def fn(a, b):
@@ -188,6 +192,7 @@ class TestPaternMatcher(TestCase):
             torch.testing.assert_close(ref, test)
             self.assertTrue("uint4x2_mixed_mm" in code)
 
+    @unittest.skipIf(any(int(arch[3:]) < 80 for arch in torch.cuda.get_arch_list()), "need sm_80")
     @inductor_config.patch(use_mixed_mm=True)
     def test_uint4x2_mixed_mm_epi(self):
         def fn(a, b, c, d):
