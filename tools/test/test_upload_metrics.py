@@ -4,7 +4,9 @@ import unittest
 from typing import Any, Dict
 from unittest import mock
 
-from tools.stats.upload_stats_lib import BATCH_SIZE, emit_metric, upload_to_rockset
+from tools.stats.upload_metrics import emit_metric
+
+from tools.stats.upload_stats_lib import BATCH_SIZE, upload_to_rockset
 
 # default values
 REPO = "some/repo"
@@ -49,7 +51,7 @@ class TestUploadStats(unittest.TestCase):
 
         emit_should_include = {
             "metric_name": "metric_name",
-            "calling_file": "test_upload_stats_lib.py",
+            "calling_file": "test_upload_metrics.py",
             "calling_module": current_module,
             "calling_function": "test_emit_metric",
             "repo": REPO,
