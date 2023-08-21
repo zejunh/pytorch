@@ -56,7 +56,13 @@ def _add_op_to_registry(registry, op, fn):
 
 def _convert_out_params(f):
     sig = inspect.signature(f)
-    out_annotation = f.__annotations__.get("out")
+
+    out_parameter_name = "out"
+    if "grad_input" in f.__annotations__:
+        out_parameter_name = "grad_input"
+
+    out_annotation = f.__annotations__.get(out_parameter_name)
+
     # Hack to detect when out is a Tuple. There seems to be no pretty way of doing this
     fn = f
     if out_annotation and getattr(out_annotation, "__origin__", None) is tuple:
@@ -70,6 +76,8 @@ def _convert_out_params(f):
             # Either all of the out kwargs are set or none of them
             is_none = out_kwargs[0] is None
             assert all((o is None) == is_none for o in out_kwargs)
+            if out_parameter_name == "grad_input":
+                return f(*args, **kwargs, grad_input=None if is_none else out_kwargs)
             return f(*args, **kwargs, out=None if is_none else out_kwargs)
 
         out_params = [
@@ -82,12 +90,17 @@ def _convert_out_params(f):
             for o, t in zip(out_names, out_annotation.__args__)
         ]
         # Drop the out parameter and concatenate the new kwargs in the signature
-        params = chain((v for k, v in sig.parameters.items() if k != "out"), out_params)
+        params = chain(
+            (v for k, v in sig.parameters.items() if k != out_parameter_name),
+            out_params,
+        )
         _fn.__signature__ = inspect.Signature(  # type: ignore[attr-defined]
             parameters=params, return_annotation=sig.return_annotation  # type: ignore[arg-type]
         )
         # Drop the out parameter and concatenate the new kwargs in the annotations
-        _fn.__annotations__ = {k: v for k, v in f.__annotations__.items() if k != "out"}
+        _fn.__annotations__ = {
+            k: v for k, v in f.__annotations__.items() if k != out_parameter_name
+        }
         for o in out_params:
             _fn.__annotations__[o.name] = o.annotation
 

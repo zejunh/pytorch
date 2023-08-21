@@ -1,6 +1,6 @@
 import inspect
 import warnings
-from functools import wraps
+from functools import partial, wraps
 from itertools import chain
 
 from typing import Callable, NamedTuple, Optional, overload, Sequence, Tuple
@@ -193,7 +193,7 @@ def _safe_copy_out(
     return copy_to.copy_(copy_from)
 
 
-def out_wrapper(*out_names: str, exact_dtype: bool = False):
+def out_wrapper(*out_names: str, out_parameter_name: str = "out", exact_dtype: bool = False):
     is_tensor = len(out_names) == 0
     assert is_tensor or len(out_names) >= 2
 
@@ -219,7 +219,10 @@ def out_wrapper(*out_names: str, exact_dtype: bool = False):
         is_factory_fn = all(p in sig.parameters for p in factory_kwargs)
 
         @wraps(fn)
-        def _fn(*args, out=None, **kwargs):
+        def _fn(*args, **kwargs):
+
+            out = kwargs.pop(out_parameter_name, None)
+
             if is_factory_fn and out is not None:
                 for k in factory_kwargs:
                     out_attr = getattr(out, k)
@@ -271,7 +274,7 @@ def out_wrapper(*out_names: str, exact_dtype: bool = False):
             return out if is_tensor else return_type(*out)  # type: ignore[operator]
 
         out_param = inspect.Parameter(
-            "out",
+            out_parameter_name,
             kind=inspect.Parameter.KEYWORD_ONLY,
             default=None,
             annotation=out_type,
@@ -283,12 +286,13 @@ def out_wrapper(*out_names: str, exact_dtype: bool = False):
             parameters=params, return_annotation=return_type  # type: ignore[arg-type]
         )
         _fn.__annotations__ = fn.__annotations__
-        _fn.__annotations__["out"] = out_type
+        _fn.__annotations__[out_parameter_name] = out_type
         _fn.__annotations__["return"] = return_type
         return _fn
 
     return _out_wrapper
 
+backward_out_wrapper = partial(out_wrapper, out_parameter_name="grad_input")
 
 def backwards_not_supported(prim):
     def redispatch_prim(args, kwargs):
