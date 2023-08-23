@@ -69,6 +69,12 @@ class TORCH_API TensorMaker {
     return *this;
   }
 
+  TensorMaker& is_nested(bool value) noexcept {
+    is_nested_ = value;
+
+    return *this;
+  }
+
   Tensor make_tensor();
 
  private:
@@ -92,6 +98,7 @@ class TORCH_API TensorMaker {
   c10::optional<Device> device_{};
   TensorOptions opts_{};
   bool resizeable_{}; // Allows the storage of this tensor to be resized
+  bool is_nested_{};
 };
 
 inline TensorMaker for_blob(void* data, IntArrayRef sizes) noexcept {
