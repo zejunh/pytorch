@@ -55,6 +55,7 @@ from .current_scope_id import enter_new_scope
 from .exc import (
     BackendCompilerFailed,
     exceptions_allowed_to_be_fallback,
+    RestartAnalysis,
     unimplemented,
     unimplemented_with_warning,
 )
@@ -271,7 +272,9 @@ class OutputGraph(Checkpointable[OutputGraphState]):
         fake_mode = torch._subclasses.FakeTensorMode(
             shape_env=ShapeEnv(
                 allow_scalar_outputs=config.capture_scalar_outputs,
-                allow_dynamic_output_shape_ops=config.capture_dynamic_output_shape_ops,
+                allow_dynamic_output_shape_ops=self.frame_state[
+                    "capture_dynamic_output_shape_ops"
+                ],
                 co_fields=self.co_fields,
             ),
             # TODO (tmanlaibaatar) Remove this once we always lift params and buffers
@@ -1053,6 +1056,9 @@ class OutputGraph(Checkpointable[OutputGraphState]):
             )
             unimplemented_with_warning(e, self.root_tx.f_code, msg)
         except Exception as e:
+            if self.frame_state["capture_dynamic_output_shape_ops"]:
+                self.frame_state["capture_dynamic_output_shape_ops"] = False
+                raise RestartAnalysis() from e
             raise BackendCompilerFailed(self.compiler_fn, e).with_traceback(
                 e.__traceback__
             ) from None
