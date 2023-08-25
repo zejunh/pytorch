@@ -1671,7 +1671,7 @@ class ExportTests(torch._dynamo.test_case.TestCase):
                     return x + x
 
                 def false_fn(x):
-                    return x[:2]
+                    return x.sin()
 
                 return cond(x.shape[0] <= 2, true_fn, false_fn, [x])
 
@@ -2872,8 +2872,8 @@ def forward(self, x):
 
         example_inputs = (torch.rand(5),)
         with self.assertRaisesRegex(
-            torch._dynamo.exc.UserError,
-            "Expected 4 arguments",
+            torch._dynamo.exc.ArgsMismatchError,
+            "missing a required argument\\: 'args'",
         ):
             torch._dynamo.export(f, aten_graph=True)(*example_inputs)
 
@@ -2899,7 +2899,7 @@ def forward(self, x):
         example_inputs = (torch.rand(5),)
         with self.assertRaisesRegex(
             torch._dynamo.exc.UserError,
-            "Expected a list but got",
+            "Expected a list or tuple but got",
         ):
             torch._dynamo.export(
                 f_non_list_operands,
@@ -2965,8 +2965,7 @@ def forward(self, x):
 
         example_inputs = (torch.randn(4), torch.randn(2))
         with self.assertRaisesRegex(
-            torch._dynamo.exc.UserError,
-            "Expected branch out type to be a single tensor",
+            torch._dynamo.exc.UserError, "Expected branch to return a single tensor"
         ):
             torch._dynamo.export(
                 f_branch_return_multiple_tensors,
@@ -2994,8 +2993,7 @@ def forward(self, x):
 
         example_inputs = (torch.rand(5),)
         with self.assertRaisesRegex(
-            torch._dynamo.exc.UserError,
-            "Expected branch out type to be a single tensor",
+            torch._dynamo.exc.UserError, "Expected branch to return a single tensor"
         ):
             torch._dynamo.export(
                 f_mismatch_return_length,
@@ -3015,7 +3013,7 @@ def forward(self, x):
         example_inputs = (torch.rand(5),)
         with self.assertRaisesRegex(
             RuntimeError,
-            r"Unmatched tensor metadata from cond\(\) branches.",
+            "Expected each tensor to have same metadata but got",
         ):
             torch._dynamo.export(f_return_tensor_mismatch, aten_graph=True)(
                 *example_inputs,

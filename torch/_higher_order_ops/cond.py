@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 from dataclasses import dataclass
 
 import torch
@@ -6,6 +7,7 @@ import torch.utils._pytree as pytree
 
 from torch._C import _ExcludeDispatchKeyGuard, DispatchKey, DispatchKeySet
 from torch._dynamo.exc import CondOpArgsMismatchError
+
 from torch._functorch.eager_transforms import (
     _unwrap_all_tensors_from_functional,
     _wrap_all_tensors_to_functional,
@@ -28,9 +30,49 @@ from torch.utils._python_dispatch import (
 )
 
 
+@contextmanager
+def _set_compilation_env():
+    _old_is_tracing = torch.fx._symbolic_trace._is_fx_tracing_flag
+    _old_capture_dyn_ops = torch._dynamo.config.capture_dynamic_output_shape_ops
+    _old_capture_scalar = torch._dynamo.config.capture_scalar_outputs
+    _old_size_limit = torch._dynamo.config.cache_size_limit
+    _old_acc_size_limit = torch._dynamo.config.accumulated_cache_size_limit
+
+    try:
+        # We need to turn off the is_fx_tracing_flag temporarily
+        # Remove it once we are confident fx tracing works with dynamo
+        torch.fx._symbolic_trace._is_fx_tracing_flag = False
+        torch._dynamo.config.capture_dynamic_output_shape_ops = True
+        torch._dynamo.config.capture_scalar_outputs = True
+        # We need to enlarge the dynamo cache size limit because
+        # cond's frame is expected to be hitted with different inputs frequently
+        torch._dynamo.config.cache_size_limit = 256
+        torch._dynamo.config.accumulated_cache_size_limit = 256
+        yield
+    finally:
+        torch.fx._symbolic_trace._is_fx_tracing_flag = _old_is_tracing
+        torch._dynamo.config.capture_dynamic_output_shape_ops = _old_capture_dyn_ops
+        torch._dynamo.config.capture_scalar_outputs = _old_capture_scalar
+        torch._dynamo.config.cache_size_limit = _old_size_limit
+        torch._dynamo.config.accumulated_cache_size_limit = _old_acc_size_limit
+
+
 @dataclass
 class UnsupportedAliasMutationException(RuntimeError):
     reason: str
+
+
+def cond_compiled(pred, true_fn, false_fn, args):
+    if torch._dynamo.is_compiling() or not torch._dynamo.is_dynamo_supported():
+        return cond(pred, true_fn, false_fn, args)
+
+    def wrapper(pred, true_fn, false_fn, args):
+        return cond(pred, true_fn, false_fn, args)
+
+    with _set_compilation_env():
+        return torch.compile(wrapper, backend="eager", fullgraph=True)(
+            pred, true_fn, false_fn, args
+        )
 
 
 """
@@ -173,8 +215,10 @@ def cond_fake_tensor_mode(pred, true_fn, false_fn, operands):
         true_meta = _extract_tensor_metadata(true_out)
         false_meta = _extract_tensor_metadata(false_out)
         if true_meta != false_meta:
-            raise RuntimeError(
-                f"Unmatched tensor metadata from cond() branches.\ntrue branch: {true_meta}, false branch: {false_meta}"
+            raise CondOpArgsMismatchError(
+                f"Expected each tensor to have same metadata but got:"
+                f"\n  {true_fn.__name__} returns {true_meta}"
+                f"\n  {false_fn.__name__} returns {false_meta}"
             )
     return true_outs
 
@@ -332,8 +376,8 @@ def cond_functionalize(interpreter, pred, true_fn, false_fn, inputs):
 
 
 # TODO(voz): Make this automatic for keys, this is very ugly atm
-cond.fallthrough(DispatchKey.PythonDispatcher)
-cond.fallthrough(DispatchKey.PythonTLSSnapshot)
+cond.fallthrough(DispatchKey.PythonDispatcher)  # type: ignore[attr-defined]
+cond.fallthrough(DispatchKey.PythonTLSSnapshot)  # type: ignore[attr-defined]
 cond.fallthrough(DispatchKey.ADInplaceOrView)
 cond.fallthrough(DispatchKey.BackendSelect)
-cond.fallthrough(DispatchKey.AutocastCPU)
+cond.fallthrough(DispatchKey.AutocastCPU)  # type: ignore[attr-defined]
