@@ -4450,7 +4450,7 @@ def empty(
 @out_wrapper()
 def empty_permuted(
     shape,
-    physical_layout,
+    dim_order,
     dtype: Optional[torch.dtype] = None,
     layout: torch.layout = torch.strided,
     device: Optional[torch.device] = None,
@@ -4459,7 +4459,7 @@ def empty_permuted(
 ) -> TensorLikeType:
     return prims.empty_permuted(
         shape,
-        physical_layout,
+        dim_order,
         dtype=dtype,
         device=device,
         requires_grad=requires_grad,
