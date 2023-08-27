@@ -18,15 +18,17 @@ from torch._dynamo.testing import rand_strided
 from torch._dynamo.utils import counters, identity
 
 from . import config, ir
+<<<<<<< HEAD
 from .autotune_process import TensorMeta, TritonBenchmarkRequest
+=======
+from .autotune_process import TritonBenchmarkRequest, TensorMeta
+>>>>>>> 6f031c8630e ([Inductor CUTLASS backend] Step 4: CUDA (template) kernels)
 from .codecache import code_hash, PersistentCache, PyCodeCache
-
-from .codegen.common import IndentedBuffer
+from .codegen.common import ChoiceCaller, IndentedBuffer, KernelTemplate
 from .codegen.triton import texpr, TritonKernel, TritonPrinter, TritonScheduling
-
 from .codegen.triton_utils import config_of, signature_to_meta
-
-from .utils import do_bench, sympy_dot, sympy_product, unique
+from .exc import CUDACompileError
+from .utils import do_bench_using_profiling, sympy_dot, sympy_product, unique
 from .virtualized import V
 
 log = logging.getLogger(__name__)
@@ -337,7 +339,7 @@ class TritonTemplateKernel(TritonKernel):
         self.body.clear()
         self.indexing_code.clear()
 
-    def call_kernel(self, name: str):
+    def call_kernel(self, name: str, node: ir.TritonTemplateBuffer):
         wrapper = V.graph.wrapper_code
         _, call_args, _ = self.args.python_argdefs()
 
@@ -383,53 +385,17 @@ def _jinja2_env():
         return None
 
 
-class TritonTemplate:
+class TritonTemplate(KernelTemplate):
     index_counter = itertools.count()
     all_templates: Dict[str, "TritonTemplate"] = dict()
 
-    @staticmethod
-    def _template_from_string(source):
-        env = _jinja2_env()
-        if env is not None:
-            return env.from_string(source)
-        return None
-
     def __init__(self, name: str, grid: Any, source: str, debug=False):
-        super().__init__()
-        self.name = name
+        super().__init__(name)
         self.grid = grid
         self.template = self._template_from_string(source)
         assert name not in self.all_templates, "duplicate template name"
         self.all_templates[name] = self
         self.debug = debug
-
-    def maybe_append_choice(
-        self,
-        choices,
-        input_nodes,
-        layout,
-        num_stages,
-        num_warps,
-        prefix_args=0,
-        suffix_args=0,
-        epilogue_fn=identity,
-        **kwargs,
-    ):
-        try:
-            choices.append(
-                self.generate(
-                    input_nodes=input_nodes,
-                    layout=layout,
-                    num_stages=num_stages,
-                    num_warps=num_warps,
-                    prefix_args=prefix_args,
-                    suffix_args=suffix_args,
-                    epilogue_fn=epilogue_fn,
-                    **kwargs,
-                )
-            )
-        except NotImplementedError:
-            pass
 
     def generate(
         self,
@@ -472,7 +438,7 @@ class TritonTemplate:
             index_dtype="tl.int32",
         )
         with patch.object(
-            V.graph, "get_dtype", self.fake_get_dtype(fake_out)
+            V.graph, "get_dtype", self._fake_get_dtype(fake_out)
         ), TritonTemplateKernel(
             kernel_name=kernel_name,
             output_node=fake_out,
@@ -535,7 +501,6 @@ class TritonTemplate:
             input_tensor_meta=TensorMeta.from_irnodes(input_nodes),
             output_tensor_meta=TensorMeta.from_irnodes(layout),
             module_cache_key=mod.key,
-            kernel_name=kernel_name,
             grid=grid,
             extra_args=extra_args,
             num_stages=num_stages,
@@ -550,17 +515,6 @@ class TritonTemplate:
             extra.strip("-").replace("-", ", "),
             bmreq,
         )
-
-    @staticmethod
-    def fake_get_dtype(fake_out):
-        _get_dtype_real = V.graph.get_dtype
-
-        def get_dtype(name):
-            if name == fake_out.get_name():
-                return fake_out.get_dtype()
-            return _get_dtype_real(name)
-
-        return get_dtype
 
 
 class ExternKernelChoice:
@@ -608,30 +562,6 @@ class ExternKernelChoice:
         )
 
 
-class ChoiceCaller:
-    def __init__(self, name, input_nodes, layout):
-        super().__init__()
-        self.name = name
-        self.layout = layout
-        self.input_nodes = input_nodes
-
-    def benchmark(self, *args, out):
-        algo = self.to_callable()
-        return do_bench(lambda: algo(*args, out=out))
-
-    def call_name(self):
-        raise NotImplementedError()
-
-    def to_callable(self):
-        raise NotImplementedError()
-
-    def hash_key(self):
-        raise NotImplementedError()
-
-    def output_node(self):
-        raise NotImplementedError()
-
-
 class TritonTemplateCaller(ChoiceCaller):
     def __init__(
         self, name, input_nodes, layout, make_kernel_render, debug_extra, bmreq
@@ -661,7 +591,7 @@ class TritonTemplateCaller(ChoiceCaller):
 
     def output_node(self):
         return ir.TensorBox.create(
-            ir.TemplateBuffer(
+            ir.TritonTemplateBuffer(
                 layout=self.layout,
                 inputs=self.input_nodes,
                 make_kernel_render=self.make_kernel_render,
@@ -697,7 +627,7 @@ class ExternKernelCaller(ChoiceCaller):
                 out_new, tuple(out.size()), tuple(out.stride())
             )
             out.copy_(out_new)  # for correctness checking
-            return do_bench(lambda: algo(*args))
+            return do_bench_using_profiling(lambda: algo(*args))
 
     def to_callable(self):
         fn = self.choice.to_callable()
@@ -752,9 +682,7 @@ class AlgorithmSelectorCache(PersistentCache):
                 "No choices to select, please consider adding ATEN into max_autotune_gemm_backends "
                 "config (defined in torch/_inductor/config.py) to allow at least one choice. "
             )
-
-        if len(choices) == 1:
-            return choices[0].output_node()
+        log.info("Max autotune selects from %s choices.", str(len(choices)))
 
         @functools.lru_cache(None)
         def make_benchmark_fn():
@@ -766,6 +694,9 @@ class AlgorithmSelectorCache(PersistentCache):
                 timing = benchmark_fn(
                     choice,
                 )
+            except CUDACompileError as e:
+                log.warning("CUDA compilation error: \n%s. \nIgnore this choice.", str(e))
+                return float('inf')
             except RuntimeError as e:
                 msg = str(e)
                 if "invalid argument" in msg:
@@ -799,8 +730,11 @@ class AlgorithmSelectorCache(PersistentCache):
 
         if make_benchmark_fn.cache_info().currsize:
             counters["inductor"]["select_algorithm_autotune"] += 1
+        if make_benchmark_fn.cache_info().currsize or log.getEffectiveLevel() == logging.DEBUG:
             self.log_results(name, input_nodes, timings, autotune_elapse)
-        return builtins.min(timings, key=timings.__getitem__).output_node()
+        selected_choice = builtins.min(timings, key=timings.__getitem__).output_node()
+        log.debug("selected choice: %s", str(selected_choice))
+        return selected_choice
 
     @classmethod
     def make_benchmark_fn(
@@ -903,7 +837,8 @@ class AlgorithmSelectorCache(PersistentCache):
                 for n in input_nodes
             ]
         )
-        top_k = sorted(timings, key=timings.__getitem__)[:10]
+        n = None if log.getEffectiveLevel() == logging.DEBUG else 10
+        top_k = sorted(timings, key=timings.__getitem__)[:n]
         best = top_k[0]
         best_time = timings[best]
         sys.stderr.write(f"AUTOTUNE {name}({sizes})\n")
