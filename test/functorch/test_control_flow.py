@@ -9,7 +9,6 @@ from functorch.experimental import control_flow
 from functorch.experimental.control_flow import UnsupportedAliasMutationException, cond
 from torch.fx.experimental.proxy_tensor import make_fx
 from torch.testing._internal.common_utils import run_tests, TestCase
-from torch._dynamo.exc import CondOpArgsMismatchError
 from torch.testing._internal.common_quantization import skipIfNoDynamoSupport
 
 def _fake_map(f, x, *args):
@@ -688,8 +687,8 @@ class TestControlFlowTraced(TestCase):
 
         x = torch.randn(4)
         with self.assertRaisesRegex(
-            CondOpArgsMismatchError,
-            "Expected each tensor to have same metadata but got",
+            torch._dynamo.exc.UncapturedHigherOrderOpError,
+            "Expect branches to return tensor that has same size but got"
         ):
             make_fx(f)(x, torch.tensor(False))
 
@@ -858,8 +857,8 @@ class TestControlFlowTraced(TestCase):
 
         x = torch.randn(4)
         with self.assertRaisesRegex(
-            CondOpArgsMismatchError,
-            "Expected each tensor to have same metadata but got",
+            torch._dynamo.exc.UncapturedHigherOrderOpError,
+            "Expect branches to return tensor that has same size but got"
         ):
             make_fx(f, tracing_mode="fake")(x, torch.tensor(False))
 
@@ -1330,7 +1329,7 @@ def forward(self, arg0_1, arg1_1, arg2_1):
         class Mod(torch.nn.Module):
             def __init__(self):
                 super().__init__()
-                self.register_parameter("param", torch.nn.Parameter(torch.ones(2, 3)))
+                self.register_parameter("param", torch.nn.Parameter(torch.ones(2, 3), requires_grad=False))
                 self.register_buffer("buffer", torch.ones(2, 3) + 1)
 
         my_mode = Mod()
