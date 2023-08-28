@@ -970,6 +970,7 @@ class HigherOrderOpTests(torch._dynamo.test_case.TestCase):
         self.assertEqual(cnt.frame_count, 0)
 
     def test_cond_subgraph_name_is_valid(self):
+        torch._dynamo.reset()
         backend = EagerAndRecordGraphs()
         cnt = CompileCounterWithBackend(backend)
 
@@ -1017,6 +1018,7 @@ class HigherOrderOpTests(torch._dynamo.test_case.TestCase):
         dynamic_shapes=True,
     )
     def test_cond_graph_break_in_one_branch(self):
+        torch._dynamo.reset()
         backend = EagerAndRecordGraphs()
         cnt = CompileCounterWithBackend(backend)
 
@@ -1038,26 +1040,20 @@ class HigherOrderOpTests(torch._dynamo.test_case.TestCase):
         mod_for_compile = torch.compile(Foo(), backend=cnt, dynamic=True)
         mod_for_eager = Foo()
 
-        actual = mod_for_compile(torch.ones(6, 4))
-        ref = mod_for_eager(torch.ones(6, 4))
-        self.assertEqual(actual, ref)
+        with self.assertRaisesRegex(
+            torch._dynamo.exc.UncapturedHigherOrderOpError,
+            r"Cond doesn't work unless it is captured completely with torch.compile",
+        ):
+            mod_for_eager(torch.ones(6, 4))
 
-        actual = mod_for_compile(torch.ones(3, 4))
-        ref = mod_for_eager(torch.ones(3, 4))
-        self.assertEqual(actual, ref)
-
-        self.assertExpectedInline(
-            backend.graphs[0].code.strip(),
-            """\
-def forward(self, s0 : torch.SymInt, s1 : torch.SymInt, L_x_ : torch.Tensor):
-    l_x_ = L_x_
-    size = l_x_.size();  l_x_ = None
-    getitem = size[0];  size = None
-    gt = getitem > 4;  getitem = None
-    return (gt,)""",
-        )
+        with self.assertRaisesRegex(
+            torch._dynamo.exc.UncapturedHigherOrderOpError,
+            r"Cond doesn't work unless it is captured completely with torch.compile",
+        ):
+            mod_for_compile(torch.ones(3, 4))
 
     def test_cond_free_variable_in_both_branches(self):
+        torch._dynamo.reset()
         backend = EagerAndRecordGraphs()
         cnt = CompileCounterWithBackend(backend)
 
@@ -1075,7 +1071,7 @@ def forward(self, s0 : torch.SymInt, s1 : torch.SymInt, L_x_ : torch.Tensor):
                 def false_fn(x):
                     return x.sum() - z.sum() - self.buffer.sum()
 
-                return control_flow.cond(y, true_fn, false_fn, [x])
+                return control_flow.cond(x, true_fn, false_fn, [y])
 
         mod_for_compile = torch.compile(
             Foo(), backend=cnt, dynamic=True, fullgraph=True
@@ -1106,6 +1102,7 @@ def forward(self, s0 : torch.SymInt, s1 : torch.SymInt, L_x_ : torch.Tensor):
                     self.assertEqual(num_placeholders, 5)
 
     def test_cond_side_effect_in_one_branches(self):
+        torch._dynamo.reset()
         backend = EagerAndRecordGraphs()
         cnt = CompileCounterWithBackend(backend)
 
@@ -1127,18 +1124,24 @@ def forward(self, s0 : torch.SymInt, s1 : torch.SymInt, L_x_ : torch.Tensor):
 
                 return control_flow.cond(y, true_fn, false_fn, [x])
 
+        mod_for_eager = Foo()
         mod_for_compile = torch.compile(
             Foo(), backend=cnt, dynamic=True, fullgraph=False
         )
-        mod_for_eager = Foo()
+        with self.assertRaisesRegex(
+            torch._dynamo.exc.UncapturedHigherOrderOpError,
+            r"Cond doesn't work unless it is captured completely with torch.compile",
+        ):
+            mod_for_eager(torch.tensor(True), torch.tensor(5))
 
-        res = mod_for_compile(torch.tensor(True), torch.tensor(5))
-        res = mod_for_compile(torch.tensor(True), torch.tensor(5))
-
-        self.assertEqual(len(backend.graphs), 0)
-        self.assertEqual(res, mod_for_eager(torch.tensor(True), torch.tensor(5)))
+        with self.assertRaisesRegex(
+            torch._dynamo.exc.UncapturedHigherOrderOpError,
+            r"Cond doesn't work unless it is captured completely with torch.compile",
+        ):
+            mod_for_compile(torch.tensor(True), torch.tensor(5))
 
     def test_cond_with_constant_pred(self):
+        torch._dynamo.reset()
         def test(pred, x):
             def true_fn(x):
                 return x

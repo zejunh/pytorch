@@ -409,6 +409,9 @@ def break_graph_if_unsupported(*, push):
                     assert isinstance(ctx, GenericContextWrappingVariable)
                     unimplemented(f"Graph break under {ctx}")
 
+                if isinstance(excp, exc.UncapturedHigherOrderOpError):
+                    raise
+
                 if not self.should_compile_partial_graph():
                     raise
 
@@ -688,10 +691,11 @@ class InstructionTranslatorBase(Checkpointable[InstructionTranslatorGraphState])
             getattr(self, inst.opname)(inst)
 
             return inst.opname != "RETURN_VALUE"
-        except Unsupported:
+        except Unsupported as e:
             if self.empty_checkpoint():
                 log.debug("empty checkpoint")
                 raise
+
             log.debug("step triggered compile", exc_info=True)
 
         # generate code from checkpoint
