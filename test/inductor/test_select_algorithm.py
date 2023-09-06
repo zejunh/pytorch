@@ -217,6 +217,36 @@ class TestSelectAlgorithm(TestCase):
         foo(torch.randn(32, 32, device="cuda"))
         self.check_counter(counters["inductor"]["select_algorithm_autotune"], 1)
 
+    @patch.object(select_algorithm, "VERIFY", dict(atol=5e-2, rtol=5e-2))
+    @patches
+    def test_mm_bf16_flags(self):
+        torch.backends.cuda.matmul.flags.allow_bf16_reduced_precision_reduction=True
+        @torch.compile
+        def foo(a, b):
+            return torch.mm(a, b)
+        
+        foo(
+            torch.randn(2, 8, 32, device="cuda", dtype=torch.bfloat16),
+            torch.randn(2, 32, 8, device="cuda", dtpye=torch.bfloat16),
+        )
+        
+        self.check_counter(counters["inductor"]["select_algorithm_autotune"], 1)
+
+    @patch.object(select_algorithm, "VERIFY", dict(atol=5e-2, rtol=5e-2))
+    @patches
+    def test_mm_f16_flags(self):
+        torch.backends.cuda.matmul.flags.allow_f16_reduced_precision_reduction=True
+        @torch.compile
+        def foo(a, b):
+            return torch.mm(a, b)
+        
+        foo(
+            torch.randn(2, 8, 32, device="cuda", dtype=torch.float16),
+            torch.randn(2, 32, 8, device="cuda", dtpye=torch.float16),
+        )
+        
+        self.check_counter(counters["inductor"]["select_algorithm_autotune"], 1)
+
     @patches
     def test_mm_dup_args_view(self):
         @torch.compile

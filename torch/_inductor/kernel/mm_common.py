@@ -132,7 +132,9 @@ def mm_grid(m, n, meta):
 
 
 def acc_type(dtype):
-    if dtype in (torch.float16, torch.bfloat16):
+    cast_fp16 = dtype == torch.float16 and not torch.backends.cuda.matmul.allow_fp16_reduced_precision_reduction
+    cast_bf16 = dtype == torch.bfloat16 and not torch.backends.cuda.matmul.allow_bf16_reduced_precision_reduction
+    if (cast_fp16 or cast_bf16):
         return "tl.float32"
     return f"tl.{dtype}".replace("torch.", "")
 
