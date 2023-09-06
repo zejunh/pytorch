@@ -2485,6 +2485,10 @@ class ShapeEnv:
 
         return SymFloat(SymNode(symbol, self, float, None, fx_node=fx_node))
 
+    def is_unbacked_symfloat(self, symbol):
+        assert isinstance(symbol, sympy.Symbol)
+        return str(symbol).startswith("f")
+
     def create_unbacked_symint(self):
         symbol: sympy.Symbol = sympy.Symbol(f"i{next(self.unbacked_symint_counter)}", integer=True)
         self.counter["create_unbacked_symbol"] += 1
@@ -2495,6 +2499,10 @@ class ShapeEnv:
         fx_node = self.create_fx_placeholder_and_z3var(symbol, int)
 
         return SymInt(SymNode(symbol, self, int, None, fx_node=fx_node))
+
+    def is_unbacked_symint_or_symbool(self, symbol):
+        assert isinstance(symbol, sympy.Symbol)
+        return str(symbol).startswith("i")
 
     def create_unbacked_symbool(self):
         symbol: sympy.Symbol = sympy.Symbol(f"i{next(self.unbacked_symint_counter)}", integer=True)
