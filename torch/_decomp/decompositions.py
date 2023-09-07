@@ -4014,6 +4014,11 @@ def scaled_dot_product_flash_attention(
     )
 
 
+@register_decomposition([aten.all.dim])
+def all_dim(input, dim, keepdim=False):
+    return torch.logical_not(torch.any(torch.logical_not(input), dim, keepdim))
+
+
 def register_inplace(aten_op, outplace_op):
     @register_decomposition(aten_op)
     def inplace_op(*args, **kwargs):
