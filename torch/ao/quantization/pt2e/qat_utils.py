@@ -367,7 +367,7 @@ def _get_conv_bn_getitem_nodes(nodes: List[Node]) -> Tuple[Node, Node, Node]:
         if n.target == torch.ops.aten.conv2d.default:
             assert conv_node is None
             conv_node = n
-        elif n.target == torch.ops.aten._native_batch_norm_legit.default:
+        elif n.target == torch.ops.aten.cudnn_batch_norm.default:
             assert bn_node is None
             bn_node = n
         elif n.target == operator.getitem:
@@ -569,7 +569,7 @@ def _fuse_conv_bn_qat(m: GraphModule) -> GraphModule:
                 _copy_over_literal_conv_args(original_node, replacement_conv_node)
                 # Step (3c): Update old references in the conv node's input_qspec_map
                 _update_conv_input_qspec_map_after_replacement(original_node, replacement_conv_node)
-            if original_node.target == torch.ops.aten._native_batch_norm_legit.default:
+            if original_node.target == torch.ops.aten.cudnn_batch_norm.default:
                 replacement_bn_node.meta = original_node.meta
                 original_to_replacement_node[original_node] = replacement_bn_node
             if original_node.target == operator.getitem:

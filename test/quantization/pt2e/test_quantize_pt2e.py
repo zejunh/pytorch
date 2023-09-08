@@ -336,7 +336,7 @@ class PT2EQuantizationTestCase(QuantizationTestCase):
         model: torch.nn.Module,
         example_inputs: Tuple[Any, ...],
         is_per_channel: bool,
-        verify_convert: bool = True,
+        verify_convert: bool = False
     ):
         """
         Helper method to verify that the QAT numerics for PT2E quantization match those of
@@ -377,28 +377,63 @@ class PT2EQuantizationTestCase(QuantizationTestCase):
             model_pt2e,
             example_inputs,
         )
-        model_pt2e = prepare_qat_pt2e(model_pt2e, quantizer)
+        #model_pt2e = prepare_qat_pt2e(model_pt2e, quantizer)
+        #for n in model_pt2e.graph.nodes:
+        #    if n.target == torch.ops.aten.cudnn_batch_norm.default:
+        #        n.target = torch.ops.aten._native_batch_norm_legit.default
+        #        print("\n\nTEST SWAPY SWAP\n\n")
 
         model_fx = copy.deepcopy(model)
+        #model_fx = torch.fx.symbolic_trace(model_fx)
         #if is_per_channel:
         #    default_qconfig = default_per_channel_symmetric_qnnpack_qat_qconfig
         #else:
         #    default_qconfig = default_symmetric_qnnpack_qat_qconfig
         #qconfig_mapping = QConfigMapping().set_global(default_qconfig)
-        #backend_config = get_qnnpack_backend_config()
         from torch.ao.quantization.qconfig_mapping import _get_symmetric_qnnpack_qat_qconfig_mapping
-        qconfig_mapping = _get_symmetric_qnnpack_qat_qconfig_mapping()
-        backend_config = get_executorch_backend_config()
-        model_fx = prepare_qat_fx(
-            model_fx, qconfig_mapping, example_inputs, backend_config=backend_config
-        )
+        #qconfig_mapping = _get_symmetric_qnnpack_qat_qconfig_mapping()
+        #backend_config = get_executorch_backend_config()
+        #model_fx = prepare_qat_fx(
+        #    model_fx, qconfig_mapping, example_inputs, backend_config=backend_config
+        #)
+        model_fx = capture_pre_autograd_graph(model_fx, example_inputs)
 
         # DEBUG CODE
 
-        for i in range(0, 15):
-            insert_print_mod(model_pt2e, "activation_post_process_" + str(i), "pt2")
-        for i in range(0, 7):
-            insert_print_mod(model_fx, "activation_post_process_" + str(i), "fx")
+        model_fx.graph.eliminate_dead_code(); model_fx.recompile()
+        model_pt2e.graph.eliminate_dead_code(); model_pt2e.recompile()
+        print(model_fx)
+        print(model_pt2e)
+
+        #insert_print_mod(model_pt2e, "activation_post_process_0", "pt2")
+        #insert_print_mod(model_pt2e, "_param_constant0", "pt2")
+        #insert_print_mod(model_pt2e, "activation_post_process_1", "pt2")
+        insert_print_mod(model_pt2e, "conv2d_default", "pt2")
+        insert_print_mod(model_pt2e, "_param_constant2", "pt2")
+        insert_print_mod(model_pt2e, "_param_constant3", "pt2")
+        insert_print_mod(model_pt2e, "_tensor_constant1", "pt2")
+        insert_print_mod(model_pt2e, "_tensor_constant2", "pt2")
+        insert_print_mod(model_pt2e, "getitem","pt2")
+        #insert_print_mod(model_pt2e, "activation_post_process_2", "pt2")
+
+        #insert_print_mod(model_fx, "activation_post_process_0", "fx")
+        #insert_print_mod(model_fx, "conv", "fx")
+        #insert_print_mod(model_fx, "activation_post_process_1", "fx")
+
+        # exported fx
+        insert_print_mod(model_fx, "conv2d_default", "fx")
+        insert_print_mod(model_fx, "_param_constant2", "fx")
+        insert_print_mod(model_fx, "_param_constant3", "fx")
+        insert_print_mod(model_fx, "_tensor_constant1", "fx")
+        insert_print_mod(model_fx, "_tensor_constant2", "fx")
+        insert_print_mod(model_fx, "_tensor_constant13", "fx")
+        insert_print_mod(model_fx, "_tensor_constant14", "fx")
+        insert_print_mod(model_fx, "getitem", "fx")
+
+        #for i in range(0, 15):
+        #    insert_print_mod(model_pt2e, "activation_post_process_" + str(i), "pt2")
+        #for i in range(0, 7):
+        #    insert_print_mod(model_fx, "activation_post_process_" + str(i), "fx")
 
         torch.manual_seed(MANUAL_SEED)
         after_prepare_result_pt2e = model_pt2e(*example_inputs)
