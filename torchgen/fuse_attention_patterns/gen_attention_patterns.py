@@ -97,7 +97,7 @@ def serialize_functions() -> None:
         }
 
         # temporary to batch adding new patterns
-        if i >= 10:
+        if i >= 18:
             continue
 
         from torch._functorch import config as functorch_config
