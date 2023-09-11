@@ -1671,7 +1671,7 @@ def main():
     # Each batch will be run sequentially
     test_batches = [
         TestBatch(
-            "high_relevance", "test_datapipe"
+            "high_relevance", "test_datapipe", should_sort_shard=True
         )
     ]
 
