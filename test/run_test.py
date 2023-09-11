@@ -1671,18 +1671,8 @@ def main():
     # Each batch will be run sequentially
     test_batches = [
         TestBatch(
-            "high_relevance", test_prioritizations.get_high_relevance_tests(), False
-        ),
-        TestBatch(
-            "probable_relevance",
-            test_prioritizations.get_probable_relevance_tests(),
-            False,
-        ),
-        TestBatch(
-            "unranked_relevance",
-            test_prioritizations.get_unranked_relevance_tests(),
-            True,
-        ),
+            "high_relevance", "test_datapipe"
+        )
     ]
 
     for test_batch in test_batches:
