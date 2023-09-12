@@ -1253,9 +1253,32 @@ void initJITBindings(PyObject* module) {
       .def(
           "__str__",
           [](c10::SymNode a) { return a->str(); })
-      .def("__repr__", [](c10::SymNode a) {
-        return a->str();
-      });
+      .def(
+          "__repr__",
+          [](c10::SymNode a) { return a->str(); })
+      .def(
+          "__hash__",
+          [](const c10::SymNode& node){
+            // For now, we only support hashing singleton ints and only in
+            // Python.
+            auto ms = node->singleton_int();
+            TORCH_CHECK(ms.has_value(), "non-singleton-int SymNode cannot be hashed")
+            return *ms;
+          })
+      .def(
+          "is_symbolic",
+          [](const c10::SymNode& node){
+            // Only ConstantSymNode and SingletonIntSymNode are possible here,
+            // so always returning false does the trick.
+            // Only support querying for is_symbolic from python for now.
+            return false;
+          })
+      .def(
+          "is_singleton_int",
+          [](const c10::SymNode& node){
+            return node->singleton_int().has_value();
+          });
+
   // clang-format on
 
   // NOLINTNEXTLINE(bugprone-unused-raii)

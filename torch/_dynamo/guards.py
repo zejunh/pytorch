@@ -41,7 +41,11 @@ from torch._guards import (
     GuardSource,
     Source,
 )
-from torch.fx.experimental.symbolic_shapes import EqualityConstraint, SYMPY_INTERP
+from torch.fx.experimental.symbolic_shapes import (
+    EqualityConstraint,
+    is_symbolic,
+    SYMPY_INTERP,
+)
 
 from torch.utils._traceback import format_frame, report_compile_source_on_error
 from torch.utils.weak import TensorWeakRef, WeakIdRef
@@ -1025,7 +1029,7 @@ class CheckFunctionManager:
             def convert(size_or_stride):
                 converted: List[Optional[int]] = []
                 for dim in size_or_stride:
-                    if isinstance(dim, int):
+                    if not is_symbolic(dim):
                         converted.append(dim)
                     else:
                         assert isinstance(dim, torch.SymInt)
@@ -1048,6 +1052,7 @@ class CheckFunctionManager:
                     ]
                 )
                 for t in tensor_check_examples
+                if not t.is_nested
             ]
 
             tensor_guards = TensorGuards(
@@ -1078,7 +1083,7 @@ class CheckFunctionManager:
                 device_index = t.device.index
                 requires_grad = t.requires_grad
                 sizes = dynamic_dims_sizes[i]
-                strides = dynamic_dims_strides[i]
+                strides = dynamic_dims_strides[i] if not t.is_nested else "None"
                 add_code_part(
                     f"check_tensor({name}, {pytype.__qualname__}, {dispatch_key}, {dtype}, "
                     f"device={device_index}, requires_grad={requires_grad}, size={sizes}, stride={strides})",
@@ -1252,7 +1257,7 @@ def guard_fail_hook(
         if isinstance(fail_reason, str):
             reason = fail_reason
             break
-        elif isinstance(fail_reason, bool) and not fail_reason:
+        elif isinstance(fail_reason, (bool, torch.SymBool)) and not fail_reason:
             reason = part
             break
 
