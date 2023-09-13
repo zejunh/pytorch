@@ -811,6 +811,18 @@ class FusedSchedulerNode(BaseSchedulerNode):
     def can_free(self):
         raise NotImplementedError
 
+class CUDASchedulerNode(SchedulerNode):
+
+    def __init__(self, scheduler: "Scheduler", node: ir.ComputedBuffer, group_fn):
+        super().__init__(scheduler, node, group_fn)
+        assert isinstance(node, ir.CUDATemplateBuffer)
+
+    def can_fuse_epilogue(self, node : BaseSchedulerNode):
+        if node.get_device() != self.get_device():
+            return False
+        if isinstance(node.node, ComputedBuffer) and isinstance(node.node.data, ir.Pointwise):
+            return True
+        return False
 
 class ForeachKernelSchedulerNode(FusedSchedulerNode):
     """Scheduler node which consists of a list of scheduler nodes that each operate on a
@@ -1110,6 +1122,9 @@ class Scheduler:
         ), "All nodes passed to scheduling must have an origin"
         if node.is_no_op():
             return NopKernelSchedulerNode(self, node)
+        elif isinstance(node, ir.CUDATemplateBuffer):
+            group_fn = self.get_backend(node.get_device()).group_fn
+            return CUDASchedulerNode(self, node, group_fn)
         elif isinstance(node, (ir.ComputedBuffer, ir.TemplateBuffer)):
             group_fn = self.get_backend(node.get_device()).group_fn
             return SchedulerNode(self, node, group_fn)
@@ -1503,7 +1518,13 @@ class Scheduler:
             not config.aggressive_fusion or node1.is_reduction() or node2.is_reduction()
         ):
             return False  # heuristic not needed for correctness
-
+        # Check for node specific epilogue fusion rules
+        if hasattr(node1, "can_fuse_epilogue") and (node1.get_names() & node2.recursive_predecessors) \
+                and node1.can_fuse_epilogue(node2):
+            return True
+        if hasattr(node2, "can_fuse_epilogue") and (node2.get_names() & node1.recursive_predecessors) \
+                and node2.can_fuse_epilogue(node1):
+            return True
         if (
             not node1.is_foreach()
             and not node2.is_foreach()

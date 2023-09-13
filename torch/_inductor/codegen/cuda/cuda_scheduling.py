@@ -1,3 +1,7 @@
+from unittest.mock import patch
+
+from . import cutlass_epilogue_gen
+from .cutlass_epilogue_gen import CutlassEpilogueFormatterHandler
 from ... import config
 from ...codecache import code_hash, get_path
 from ...utils import get_fused_kernel_name, get_kernel_metadata
@@ -41,3 +45,32 @@ class CUDAScheduling(TritonScheduling):
                 kernel_name, compile_wrapper.getvalue(), metadata_comment
             )
         return kernel_name
+
+
+    def codegen_template(self, template_node, epilogue_nodes):
+        """
+        Codegen a CUDA template
+        """
+        _, (numel, rnumel) = template_node.group
+        assert rnumel == 1
+        kernel, render = template_node.node.make_kernel_render(template_node.node)
+        epilogue_init_list = []
+        epilogue_param_list = []
+        with ((kernel)):
+            for node in [template_node, *epilogue_nodes]:
+                node.mark_run()
+            src_code = render()  # TODO: Add epilogue nodes to render
+            with patch.object(cutlass_epilogue_gen._evt_generator_state, 'accumulator_node_name', template_node.node.name),\
+                 patch.object(V, "KernelFormatterHandler", CutlassEpilogueFormatterHandler):
+                for node in epilogue_nodes:
+                    epilogue_init = node.node.data.inner_fn_str()
+                    epilogue_init_list.append(epilogue_init)
+
+        src_code_with_epilogue = src_code.replace("#EPILOGUE_DECLARATION#", "\n".join(epilogue_init_list))
+        with V.set_kernel_handler(kernel):
+            node_schedule = [template_node, *epilogue_nodes]
+            kernel_name = self.define_kernel(src_code, node_schedule)
+        self.codegen_comment(node_schedule)
+        kernel.call_kernel(kernel_name, template_node.node)
+        V.graph.removed_buffers |= kernel.removed_buffers
+        self.scheduler.free_buffers()
