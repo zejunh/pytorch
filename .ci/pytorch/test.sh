@@ -325,6 +325,10 @@ else
   DYNAMO_BENCHMARK_FLAGS+=(--device cuda)
 fi
 
+if [[ "${TEST_CONFIG}" == *multiprocess* ]]; then
+  DYNAMO_BENCHMARK_FLAGS+=(--multiprocess)
+else
+
 test_perf_for_dashboard() {
   TEST_REPORTS_DIR=$(pwd)/test/test-reports
   mkdir -p "$TEST_REPORTS_DIR"
