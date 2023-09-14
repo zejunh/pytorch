@@ -44,6 +44,7 @@ from torch._prims_common.wrappers import (
     _safe_copy_out,
     elementwise_type_promotion_wrapper,
     elementwise_unary_scalar_wrapper,
+    maybe_remove_out_wrapper,
     out_wrapper,
 )
 
@@ -5537,7 +5538,12 @@ def norm(
         return torch.linalg.vector_norm(input, p, dim, keepdim, dtype=dtype)
 
 
-@register_decomposition(aten.trace)
+# Using out_wrapper will break test/test_ops.py:TestCommon::test_out_warning
+# Since the test uses the python function directly and expects trace to not support
+# the out wrapper
+@maybe_remove_out_wrapper
+@register_decomposition(aten.trace.default)
+@out_wrapper()
 def trace(self: TensorLikeType) -> TensorLikeType:
     torch._check(
         self.ndim == 2, lambda: "expected a matrix, but got tensor with dim {self.ndim}"
