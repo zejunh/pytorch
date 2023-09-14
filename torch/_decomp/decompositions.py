@@ -4020,6 +4020,23 @@ def scaled_dot_product_flash_attention(
     )
 
 
+@register_decomposition(aten.rand_like)
+def rand_like(
+    self: Tensor,
+    *,
+    dtype: Optional[torch.dtype] = None,
+    layout: Optional[torch.layout] = None,
+    device: Optional[torch.device] = None,
+    pin_memory: bool = None,
+    memory_format: Optional[torch.memory_format] = None,
+):
+    return torch.rand(
+        [*self.size()],
+        dtype=dtype or self.dtype,
+        device=device or self.device,
+    ).to(memory_format=memory_format).as_strided(self.size(), self.stride())
+
+
 def register_inplace(aten_op, outplace_op):
     @register_decomposition(aten_op)
     def inplace_op(*args, **kwargs):
