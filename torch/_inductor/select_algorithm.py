@@ -887,7 +887,7 @@ class AlgorithmSelectorCache(PersistentCache):
         for choice in top_k:
             result = timings[choice]
             sys.stderr.write(
-                f"  {choice.name} {result:.4f} ms {best_time/result:.1%}\n"
+                f"  {choice.name} {result:.4f} ms {best_time/result if result != 0 else 1:.1%}\n"
             )
 
         autotune_type_str = (
