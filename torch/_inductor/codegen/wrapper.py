@@ -549,21 +549,25 @@ class WrapperCodeGen(CodeGen):
 
         return result.getvaluewithlinemap()
 
+    def codegen_input_size_var_decl(self, code: IndentedBuffer, name):
+        code.writeline(f"{self.declare}{name}_size = {name}.{self.size}{self.ending}")
+
+    def codegen_input_stride_var_decl(self, code: IndentedBuffer, name):
+        code.writeline(
+            f"{self.declare}{name}_stride = {name}.{self.stride}{self.ending}"
+        )
+
     def codegen_inputs(self, code: IndentedBuffer, graph_inputs: Dict[str, ir.Buffer]):
         """Assign all symbolic shapes to locals"""
 
         @functools.lru_cache(None)
         def sizeof(name):
-            code.writeline(
-                f"{self.declare}{name}_size = {name}.{self.size}{self.ending}"
-            )
+            self.codegen_input_size_var_decl(code, name)
             return f"{name}_size"
 
         @functools.lru_cache(None)
         def strideof(name):
-            code.writeline(
-                f"{self.declare}{name}_stride = {name}.{self.stride}{self.ending}"
-            )
+            self.codegen_input_stride_var_decl(code, name)
             return f"{name}_stride"
 
         # Assign all symbolic shapes needed to local variables
@@ -965,9 +969,23 @@ class CppWrapperCodeGen(WrapperCodeGen):
         self.declared_int_array_vars = set()
         self.tmp_tensor_id = count()  # for tmp tensor local variable declarations
 
-        from .cpp import cexpr
+        from .cpp import cexpr, CppPrinter
 
         self.expr_printer = cexpr
+
+        # CppPrinter sometimes calls at::native functions which causes problems in
+        # the ABI compatible mode. Currently we are hitting this problem when codegen
+        # Grid computation expressions, but we my need to fix other size computation
+        # as well.
+        class GridExprCppPrinter(CppPrinter):
+            def _print_FloorDiv(self, expr):
+                x, div = expr.args
+                x = self.paren(self.doprint(x))
+                div = self.paren(self.doprint(div))
+                assert expr.is_integer, "Expect integers in GridExprPrinter"
+                return f"({x}/{div})"
+
+        self.grid_expr_printer = GridExprCppPrinter().doprint
 
     def write_constant(self, name, hashed):
         # include a hash so our code cache gives different constants different files
@@ -1140,6 +1158,24 @@ class CppWrapperCodeGen(WrapperCodeGen):
                     torch::List<c10::optional<at::Scalar>> optional_list;
                     """
                 )
+
+    def codegen_input_size_var_decl(self, code: IndentedBuffer, name):
+        if config.aot_inductor.abi_compatible:
+            code.writeline(f"int64_t* {name}_size;")
+            code.writeline(
+                f"AOTI_TORCH_ERROR_CHECK(aoti_torch_get_sizes(&{name}_size, {name}.get()));"
+            )
+        else:
+            super().codegen_input_size_var_decl(code, name)
+
+    def codegen_input_stride_var_decl(self, code: IndentedBuffer, name):
+        if config.aot_inductor.abi_compatible:
+            code.writeline(f"int64_t* {name}_stride;")
+            code.writeline(
+                f"AOTI_TORCH_ERROR_CHECK(aoti_torch_get_strides(&{name}_stride, {name}.get()));"
+            )
+        else:
+            super().codegen_input_stride_var_decl(code, name)
 
     def codegen_model_constructor(self):
         """
@@ -1823,11 +1859,11 @@ class CudaWrapperCodeGen(CppWrapperCodeGen):
             namespace {
 
             struct Grid {
-                Grid(int32_t x, int32_t y, int32_t z)
+                Grid(uint32_t x, uint32_t y, uint32_t z)
                   : grid_x(x), grid_y(y), grid_z(z) {}
-                int32_t grid_x;
-                int32_t grid_y;
-                int32_t grid_z;
+                uint32_t grid_x;
+                uint32_t grid_y;
+                uint32_t grid_z;
             };
 
             }  // anonymous namespace
@@ -1835,7 +1871,7 @@ class CudaWrapperCodeGen(CppWrapperCodeGen):
             static inline CUfunction loadKernel(
                     const std::string &filePath,
                     const std::string &funcName,
-                    int sharedMemBytes) {
+                    uint32_t sharedMemBytes) {
                 CUmodule mod;
                 CUfunction func;
                 CUDA_DRIVER_CHECK(cuModuleLoad(&mod, filePath.c_str()));
@@ -1852,15 +1888,16 @@ class CudaWrapperCodeGen(CppWrapperCodeGen):
 
             static inline void launchKernel(
                     CUfunction func,
-                    int gridX,
-                    int gridY,
-                    int gridZ,
-                    int numWarps,
-                    int sharedMemBytes,
+                    uint32_t gridX,
+                    uint32_t gridY,
+                    uint32_t gridZ,
+                    uint32_t numWarps,
+                    uint32_t sharedMemBytes,
                     void* args[],
                     cudaStream_t stream) {
                 CUDA_DRIVER_CHECK(cuLaunchKernel(
-                    func, gridX, gridY, gridZ, 32*numWarps, 1, 1, sharedMemBytes, stream, args, nullptr));
+                    func, gridX, gridY, gridZ, 32*numWarps, 1, 1, sharedMemBytes, stream, args, nullptr
+                ));
             }
             """
         )
@@ -1981,8 +2018,9 @@ class CudaWrapperCodeGen(CppWrapperCodeGen):
         assert isinstance(
             grid, (list, tuple)
         ), f"expected grid to be a list or tuple but got: {grid=}"
+
         grid_args = [
-            self.expr_printer(V.graph.sizevars.simplify(item)) for item in grid
+            self.grid_expr_printer(V.graph.sizevars.simplify(item)) for item in grid
         ]
         grid_args_str = ", ".join(grid_args)
         self.writeline(f"Grid {grid_name} = Grid({grid_args_str});")

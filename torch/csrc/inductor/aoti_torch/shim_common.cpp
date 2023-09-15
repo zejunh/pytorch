@@ -92,6 +92,20 @@ AOTITorchError aoti_torch_get_data_ptr(void** ret, AtenTensorHandle tensor) {
   });
 }
 
+AOTITorchError aoti_torch_get_sizes(int64_t** ret, AtenTensorHandle tensor) {
+  AOTI_TORCH_CONVERT_EXCEPTION_TO_ERROR_CODE({
+    at::Tensor* t = tensor_handle_to_tensor_pointer(tensor);
+    *ret = const_cast<int64_t*>(t->sizes().data());
+  });
+}
+
+AOTITorchError aoti_torch_get_strides(int64_t** ret, AtenTensorHandle tensor) {
+  AOTI_TORCH_CONVERT_EXCEPTION_TO_ERROR_CODE({
+    at::Tensor* t = tensor_handle_to_tensor_pointer(tensor);
+    *ret = const_cast<int64_t*>(t->strides().data());
+  });
+}
+
 AOTITorchError aoti_torch__reinterpret_tensor(
     AtenTensorHandle* ret,
     AtenTensorHandle self,

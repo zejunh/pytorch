@@ -107,6 +107,14 @@ AOTI_TORCH_EXPORT AOTI_TORCH_NOINLINE AOTITorchError aoti_torch_get_data_ptr(
     void** ret, // returns borrowed reference
     AtenTensorHandle tensor);
 
+AOTI_TORCH_EXPORT AOTI_TORCH_NOINLINE AOTITorchError aoti_torch_get_sizes(
+    int64_t** ret, // returns borrowed reference
+    AtenTensorHandle tensor);
+
+AOTI_TORCH_EXPORT AOTI_TORCH_NOINLINE AOTITorchError aoti_torch_get_strides(
+    int64_t** ret, // returns borrowed reference
+    AtenTensorHandle tensor);
+
 // This function will create a new tensor object and its pointer is returned
 // through *out. The caller is responsible for wrapping the tensor pointer
 // with RAIIAtenTensorHandle which will call aoti_torch_delete_tensor_object
