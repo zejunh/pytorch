@@ -199,10 +199,10 @@ class SparseSemiStructuredTensor(torch.Tensor):
                 )
 
                 from torch.sparse._semi_structured_conversions import (
-                    sparse_semi_structured_from_dense,
+                    sparse_semi_structured_from_dense_cutlass,
                 )
 
-                sparse, meta = sparse_semi_structured_from_dense(original_tensor)
+                sparse, meta = sparse_semi_structured_from_dense_cutlass(original_tensor)
                 compressed_tensor[: m * n // 2] = sparse.view(-1)
                 compressed_tensor[m * n // 2 :] = meta.view(original_tensor.dtype).view(
                     -1
@@ -364,6 +364,9 @@ class SparseSemiStructuredTensor(torch.Tensor):
         raise NotImplementedError(error_string)
 
     def to_dense(self):
+        if not self._FORCE_CUTLASS:
+            raise RuntimeError("Converting to dense is not yet supported by cuSPARSELt backend!")
+
         if self.compressed_tensor is None:
             raise RuntimeError("Compressed tensor is not set, cannot convert to dense!")
 
@@ -371,10 +374,10 @@ class SparseSemiStructuredTensor(torch.Tensor):
         indices_dtype = SparseSemiStructuredTensor.__get_indices_dtype(self.dtype)
 
         from torch.sparse._semi_structured_conversions import (
-            sparse_semi_structured_to_dense,
+            sparse_semi_structured_to_dense_cutlass,
         )
 
-        return sparse_semi_structured_to_dense(
+        return sparse_semi_structured_to_dense_cutlass(
             self.compressed_tensor[: m * n // 2].view(m, -1),
             self.compressed_tensor[m * n // 2 :].view(indices_dtype).view(m, -1),
         )
