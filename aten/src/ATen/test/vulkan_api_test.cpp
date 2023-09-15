@@ -8,6 +8,7 @@
 #include <ATen/native/vulkan/ops/Convolution.h>
 #include <c10/util/irange.h>
 
+
 // TODO: These functions should move to a common place.
 
 namespace {
@@ -851,6 +852,53 @@ TEST_F(VulkanAPITest, batch_norm_large) {
   }
 
   ASSERT_TRUE(check);
+}
+
+void test_bmm(at::Tensor m1_cpu, at::Tensor m2_cpu) {
+  const auto out_cpu = m1_cpu.bmm(m2_cpu);
+
+  const auto m1_vulkan = m1_cpu.vulkan();
+  const auto out_vulkan = m1_vulkan.bmm(m2_cpu);
+
+  const auto check = almostEqual(out_cpu, out_vulkan.cpu());
+  if (!check) {
+    showRtol(out_cpu, out_vulkan.cpu());
+  }
+
+  ASSERT_TRUE(check);
+
+}
+
+TEST_F(VulkanAPITest, bmm) {
+  const auto m1_cpu =
+      at::rand({13, 179, 67}, at::device(at::kCPU).dtype(at::kFloat));
+  const auto m2_cpu =
+      at::rand({13, 67, 163}, at::device(at::kCPU).dtype(at::kFloat));
+  test_bmm(m1_cpu, m2_cpu);
+}
+
+TEST_F(VulkanAPITest, bmm_large) {
+  const auto m1_cpu =
+      at::rand({131, 235, 546}, at::device(at::kCPU).dtype(at::kFloat));
+  const auto m2_cpu =
+      at::rand({131, 546, 267}, at::device(at::kCPU).dtype(at::kFloat));
+  test_bmm(m1_cpu, m2_cpu);
+}
+
+TEST_F(VulkanAPITest, bmm_small) {
+  const auto m1_cpu =
+      at::rand({2, 6, 5}, at::device(at::kCPU).dtype(at::kFloat));
+  const auto m2_cpu =
+      at::rand({2, 5, 3}, at::device(at::kCPU).dtype(at::kFloat));
+  test_bmm(m1_cpu, m2_cpu);
+}
+
+TEST_F(VulkanAPITest, bmm_one) {
+  const auto m1_cpu =
+      at::rand({1, 1, 1}, at::device(at::kCPU).dtype(at::kFloat));
+  const auto m2_cpu =
+      at::rand({1, 1, 1}, at::device(at::kCPU).dtype(at::kFloat));
+  test_bmm(m1_cpu, m2_cpu);
 }
 
 TEST_F(VulkanAPITest, clamp) {
