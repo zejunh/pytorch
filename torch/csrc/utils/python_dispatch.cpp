@@ -587,6 +587,9 @@ void initDispatchBindings(PyObject* module) {
       DEF_ONE(AutogradNestedTensor)
       DEF_ONE(AutogradOther)
       DEF_ONE(Autograd)
+      DEF_ONE(Conjugate)
+      DEF_ONE(ZeroTensor)
+      DEF_ONE(Negative)
       DEF_ONE(BackendSelect)
       DEF_ONE(ADInplaceOrView)
       DEF_ONE(PythonTLSSnapshot)
@@ -692,6 +695,10 @@ void initDispatchBindings(PyObject* module) {
       c10::impl::ExcludeDispatchKeyGuard,
       c10::DispatchKeySet>(m, "ExcludeDispatchKeyGuard");
 
+  py_context_manager<
+      c10::impl::ForceDispatchKeyGuard,
+      c10::DispatchKeySet,
+      c10::DispatchKeySet>(m, "_ForceDispatchKeyGuard");
   py_context_manager<c10::impl::IncludeDispatchKeyGuard, c10::DispatchKey>(
       m, "_IncludeDispatchKeyGuard");
   py_context_manager<c10::impl::ExcludeDispatchKeyGuard, c10::DispatchKeySet>(
